@@ -1,0 +1,20 @@
+Added Component: Designator=P5(KF128 5.08 2P)
+Add component (AddParameter): Name = "Code"; Value = "3520-013"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1 Description"; Value = "Manufacturer"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1URL"; Value = "http://www.we-online.com"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2 Description"; Value = "Datasheet"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2URL"; Value = "http://katalog.we-online.de/em/datasheet/6911031100xx.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Designed by"; Value = "TranLuyen"; VariantName = "[No Variations]"
+Added Component: Designator=P9(KF128 5.08 2P)
+Add component (AddParameter): Name = "Code"; Value = "3520-013"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1 Description"; Value = "Manufacturer"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink1URL"; Value = "http://www.we-online.com"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2 Description"; Value = "Datasheet"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "ComponentLink2URL"; Value = "http://katalog.we-online.de/em/datasheet/6911031100xx.pdf"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Designed by"; Value = "TranLuyen"; VariantName = "[No Variations]"
+Added Pin To Net: NetName=GND Pin=P5-1
+Added Pin To Net: NetName=RST Pin=P5-2
+Added Pin To Net: NetName=GND Pin=P9-1
+Added Pin To Net: NetName=ICP_CLK Pin=P9-2
+Added Member To Class: ClassName=schematic Member=Component P5 KF128 2P
+Added Member To Class: ClassName=schematic Member=Component P9 KF128 2P

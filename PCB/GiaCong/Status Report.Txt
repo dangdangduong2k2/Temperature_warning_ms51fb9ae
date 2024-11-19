@@ -1,0 +1,10 @@
+Output: PANEL PICKPLACE
+Type  : Pick Place
+From  : Variant [[No Variations]] of PCB Document [panel 2x4.PcbDoc]
+   Generated File[2024-10-02 PANEL PICKPLACE Project name.csv]
+
+
+Files Generated   : 1
+Documents Printed : 0
+
+Finished Output Generation At 5:15:41 PM On 10/2/2024

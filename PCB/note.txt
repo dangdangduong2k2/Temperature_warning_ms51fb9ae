@@ -1,0 +1,4 @@
+them GND NTC
+sai chiều jack nguồn
+trở 10R pwm
+them tụ song song C27 100pF

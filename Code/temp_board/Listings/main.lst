@@ -1,0 +1,862 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c LARGE ROM(COMPACT) OPTIMIZE(8,SPEED) BROWSE INCDIR(.\library) DEF
+                    -INE(FOSC_160000) DEBUG OBJECTEXTEND PRINT(.\Listings\main.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "main.h"
+   2          #include "string.h"
+   3          /* Define Value*/
+   4          uint16_t A0,A1,A2,A3,A4,A5,FB_B;
+   5          uint16_t Thresh_hole1 = 0;
+   6          uint16_t Thresh_hole2 = 0;
+   7          uint8_t Sensor_is_on =0;
+   8          uint8_t buzzer_is_on =0;
+   9          uint16_t count_to_off_buzzer=0;
+  10          uint8_t using_ADC ; //0:LOW,1:HIGH
+  11          uint8_t buff[20];
+  12          uint16_t temp[6]={0,0,0,0,0,0};
+  13          float FB;
+  14          int tick;
+  15          uint8_t hall_is_on=0;
+  16          uint8_t off_t_low=0;
+  17          uint8_t turn_5s_buzzer=0;
+  18          float avg_low_temperature,avg_high_temperature;
+  19          uint8_t is_on_thresh_hold=0;
+  20          uint8_t is_on_thresh_hold1=0;
+  21          uint8_t but;
+  22          uint8_t set_mode=0;
+  23          uint8_t set_done=1;
+  24          uint8_t but_count[6]={0,0,0,0,0,0};
+  25          uint8_t seg_code[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F}; // common cathode
+  26          uint16_t count=0;
+  27          uint8_t data_fl[1];
+  28          /* Define Pin By Config_GPIO */
+  29          #define AN0 P17 //
+  30          #define AN1 P30 //
+  31          #define AN2 P07 //
+  32          #define AN3 P06 //
+  33          #define AN4 P05 //
+  34          #define AN5 P04 //
+  35          #define FB_BUZZER P03 //
+  36          #define PWM P01  //
+  37          #define RELAY P00 //
+  38          #define SENSOR P12 //
+  39          #define BUZZER P15 // 
+  40          #define SDA P14 //
+  41          #define SCL P13 //
+  42          #define SDA_BUT P11 
+  43          #define SCK_BUT P10
+  44          
+  45          #define BRIGHTNESS_LV1 0x10
+  46          #define BRIGHTNESS_LV2 0x20
+  47          #define BRIGHTNESS_LV3 0x30
+  48          #define BRIGHTNESS_LV4 0x40
+  49          #define BRIGHTNESS_LV5 0x50
+  50          #define BRIGHTNESS_LV6 0x60
+  51          #define BRIGHTNESS_LV7 0x70
+  52          #define BRIGHTNESS_LV8 0x00
+  53          
+  54          void soft_i2c_start(void)
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 2   
+
+  55          {
+  56   1        SCK_BUT = 1;
+  57   1        SDA_BUT = 1;
+  58   1        delay_us(10);
+  59   1        SDA_BUT = 0;
+  60   1        delay_us(10);
+  61   1        SCK_BUT = 0;
+  62   1      }
+  63          void soft_i2c_write(uint8_t data_send) {
+  64   1        int i;
+  65   1        for ( i = 0; i < 8; i++) {
+  66   2          delay_us(10);
+  67   2          if (data_send & 0x80) {
+  68   3            SDA_BUT = 1;
+  69   3          }
+  70   2          else SDA_BUT = 0;
+  71   2          data_send <<= 1;
+  72   2      
+  73   2          SCK_BUT = 1;
+  74   2          delay_us(10);
+  75   2          SCK_BUT = 0;
+  76   2        }
+  77   1      
+  78   1        delay_us(20);
+  79   1        SCK_BUT = 1;
+  80   1        delay_us(25);
+  81   1        SCK_BUT = 0;
+  82   1        SDA_BUT = 0;
+  83   1      }
+  84          void soft_i2c_stop() {
+  85   1        // LCD_SCL_PIN = 0; 
+  86   1        // LCD_SDA_PIN = 0;
+  87   1        delay_us(10);
+  88   1        SCK_BUT = 1;
+  89   1        delay_us(10);
+  90   1        SDA_BUT = 1;
+  91   1      }
+  92          void TM1650_init(void) {
+  93   1        SDA_BUT = 1;
+  94   1        SCK_BUT = 1;
+  95   1      
+  96   1        soft_i2c_start();
+  97   1        soft_i2c_write(0x48);
+  98   1        soft_i2c_write(BRIGHTNESS_LV5 | 0x01);
+  99   1        soft_i2c_stop();
+ 100   1      }
+ 101          
+ 102          
+ 103          void TM1650_write(uint8_t address, uint8_t value) { // 68 6a 6c 6e
+ 104   1        soft_i2c_start();
+ 105   1        soft_i2c_write(address);
+ 106   1        soft_i2c_write(value);
+ 107   1        soft_i2c_stop();
+ 108   1      }
+ 109          
+ 110          
+ 111          uint8_t soft_i2c_read(uint8_t ack) {
+ 112   1        uint8_t i   = 0;
+ 113   1        uint8_t dat = 0;
+ 114   1      //  Config_GPIO(I2C->SDA, Quasi); // Config SDA to input
+ 115   1        SDA_BUT=1;
+ 116   1        for (i = 0; i < 8; i++) {
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 3   
+
+ 117   2          delay_us(10);
+ 118   2          SCK_BUT=1;
+ 119   2          delay_us(7);
+ 120   2          dat = dat * 2;
+ 121   2          if (SDA_BUT) dat = dat + 1;
+ 122   2          delay_us(3);
+ 123   2          SCK_BUT=0;
+ 124   2        }
+ 125   1        delay_us(10);
+ 126   1        SDA_BUT=!ack;
+ 127   1        delay_us(10);
+ 128   1        SCK_BUT=1;
+ 129   1        delay_us(50);
+ 130   1        SCK_BUT=0;
+ 131   1        return dat;
+ 132   1      }
+ 133          
+ 134          uint8_t TM1650_read(void) {
+ 135   1        uint8_t tm_data = 0;
+ 136   1        soft_i2c_start();
+ 137   1        
+ 138   1        soft_i2c_write(0x49);
+ 139   1        tm_data =soft_i2c_read(1);
+ 140   1        soft_i2c_stop();
+ 141   1        return tm_data;
+ 142   1      }
+ 143          
+ 144          
+ 145          void abs_16(uint16_t value)
+ 146          {
+ 147   1        if(value<0)
+ 148   1        {
+ 149   2          value=-value;
+ 150   2        }
+ 151   1        else
+ 152   1        {
+ 153   2          value=value;
+ 154   2        }
+ 155   1      }
+ 156          void string_to_lcd(uint8_t *buff)
+ 157          {
+ 158   1        while(*buff)
+ 159   1        {
+ 160   2            lcd_soft_i2c_data(*buff++);
+ 161   2        }
+ 162   1      }
+ 163          float map(double value, double fromMin, double fromMax, double toMin, double toMax) 
+ 164          {   
+ 165   1          
+ 166   1         
+ 167   1          float scale,result;
+ 168   1          if (value < fromMin) value = fromMin;
+ 169   1          if (value > fromMax) value = fromMax;
+ 170   1          scale = (toMax - toMin) / (fromMax - fromMin);
+ 171   1          result = toMin + (value - fromMin) * scale;
+ 172   1          
+ 173   1          return result;
+ 174   1      }
+ 175          
+ 176          /* Define Pin By Config_GPIO */
+ 177          void GPIO_INIT() {
+ 178   1        /* ===== GPIO INIT =====
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 4   
+
+ 179   1        |  Port  |    Px7    |    Px6    |    Px5    |    Px4    |    Px3    |    Px2    |    Px1    |    Px0    
+             -|
+ 180   1        |   P0   |Input-only |Input-only |Input-only |Input-only |Input-only |Open-drain | Push-pull | Push-pull 
+             -|
+ 181   1        |   P1   |Input-only |Input-only | Push-pull | Push-pull | Push-pull |Input-only |Input-only | Push-pull 
+             -|
+ 182   1        |   P3   |    ---    |    ---    |    ---    |    ---    |    ---    |    ---    |    ---    |Input-only 
+             -|
+ 183   1        ===== GPIO INIT =====*/
+ 184   1        P0M1=0xFC;
+ 185   1        P0M2=0x03;
+ 186   1        P1M1=0xC6;
+ 187   1        P1M2=0x39;
+ 188   1        P3M1=0x01;
+ 189   1        P3M2=0x00;
+ 190   1        /* ===== GPIO DEFAULT STATE =====
+ 191   1        |  Port  |    Px7    |    Px6    |    Px5    |    Px4    |    Px3    |    Px2    |    Px1    |    Px0    
+             -|
+ 192   1        |   P0   |     0     |     0     |     0     |     0     |     0     |     0     |     0     |     0     
+             -|
+ 193   1        |   P1   |     0     |     0     |     0     |     0     |     0     |     0     |     0     |     0     
+             -|
+ 194   1        |   P3   |    ---    |    ---    |    ---    |    ---    |    ---    |    ---    |    ---    |     0     
+             -|
+ 195   1        ===== GPIO DEFAULT STATE =====*/
+ 196   1        P0=0x00;
+ 197   1        P1=0x00;
+ 198   1        P3=0x00;
+ 199   1        P13 =0;
+ 200   1        P14 =0;
+ 201   1        P11_Quasi_Mode;
+ 202   1        P16_PushPull_Mode;
+ 203   1        P16=1;
+ 204   1      }               
+ 205          /////////////////////////////////
+ 206          /////////////////////////////////
+ 207          /////////////////////////////////
+ 208          /////////////////////////////////
+ 209          struct eeprom_type {
+ 210            uint8_t buff1;
+ 211            uint8_t buff2;
+ 212            uint8_t buff3;
+ 213          } eData;
+ 214          
+ 215          
+ 216          
+ 217            
+ 218          
+ 219          
+ 220          void GPIO_check(void)
+ 221          {
+ 222   1        /////HALL_SENSOR////
+ 223   1        if(P12==0)
+ 224   1        {
+ 225   2          hall_is_on=1;
+ 226   2        }
+ 227   1        else
+ 228   1        {
+ 229   2          hall_is_on=0;
+ 230   2        }
+ 231   1        /////BUZZER_OFF////
+ 232   1      }
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 5   
+
+ 233          
+ 234          void DISPLAY_check(void)
+ 235          {
+ 236   1          if(tick>=500)
+ 237   1          {
+ 238   2                lcd_soft_i2c_command(ADDR_LINE1);
+ 239   2                sprintf(buff,"-------T LOW--------");
+ 240   2                string_to_lcd(buff);
+ 241   2                lcd_soft_i2c_command(ADDR_LINE2);
+ 242   2                //T1
+ 243   2                lcd_soft_i2c_data('T');
+ 244   2                lcd_soft_i2c_data('4');
+ 245   2                lcd_soft_i2c_data(':');
+ 246   2                if(temp[0]>0 && 999>temp[0])
+ 247   2                {
+ 248   3                  if(temp[0]>99)
+ 249   3                  {
+ 250   4                    sprintf(buff,"%d ",temp[0]);
+ 251   4                    string_to_lcd(buff);
+ 252   4                  }
+ 253   3                  else
+ 254   3                  {
+ 255   4                    sprintf(buff,"%d  ",temp[0]);
+ 256   4                    string_to_lcd(buff);
+ 257   4                  }
+ 258   3                }
+ 259   2                else 
+ 260   2                {
+ 261   3                  sprintf(buff,"    ",temp[0]);
+ 262   3                  string_to_lcd(buff);
+ 263   3                }
+ 264   2                //T2
+ 265   2                lcd_soft_i2c_data('T');
+ 266   2                lcd_soft_i2c_data('5');
+ 267   2                lcd_soft_i2c_data(':');
+ 268   2                if(temp[1]>0 && 999>temp[1])
+ 269   2                {
+ 270   3                  if(temp[1]>99)
+ 271   3                  {
+ 272   4                    sprintf(buff,"%d ",temp[1]);
+ 273   4                    string_to_lcd(buff);
+ 274   4                  }
+ 275   3                  else
+ 276   3                  {
+ 277   4                    sprintf(buff,"%d  ",temp[1]);
+ 278   4                    string_to_lcd(buff);
+ 279   4                  }
+ 280   3                }
+ 281   2                else 
+ 282   2                {
+ 283   3                  sprintf(buff,"    ",temp[1]);
+ 284   3                  string_to_lcd(buff);
+ 285   3                }
+ 286   2                //T3
+ 287   2                lcd_soft_i2c_data('T');
+ 288   2                lcd_soft_i2c_data('6');
+ 289   2                lcd_soft_i2c_data(':');
+ 290   2                if(temp[2]>0 && 999>temp[2])
+ 291   2                {
+ 292   3                  if(temp[2]>99)
+ 293   3                  {
+ 294   4                    sprintf(buff,"%d ",temp[2]);
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 6   
+
+ 295   4                    string_to_lcd(buff);
+ 296   4                  }
+ 297   3                  else
+ 298   3                  {
+ 299   4                    sprintf(buff,"%d",temp[2]);
+ 300   4                    string_to_lcd(buff);
+ 301   4                  }
+ 302   3                }
+ 303   2                else 
+ 304   2                {
+ 305   3                  sprintf(buff,"   ",temp[2]);
+ 306   3                  string_to_lcd(buff);
+ 307   3                }
+ 308   2                lcd_soft_i2c_command(ADDR_LINE3);
+ 309   2                sprintf(buff,"-------T HIGH-------");
+ 310   2                string_to_lcd(buff);
+ 311   2                lcd_soft_i2c_command(ADDR_LINE4);
+ 312   2                //T4
+ 313   2                lcd_soft_i2c_data('T');
+ 314   2                lcd_soft_i2c_data('1');
+ 315   2                lcd_soft_i2c_data(':');
+ 316   2                if(temp[3]>0 && 999>temp[3])
+ 317   2                {
+ 318   3                  if(temp[3]>99)
+ 319   3                  {
+ 320   4                    sprintf(buff,"%d ",temp[3]);
+ 321   4                    string_to_lcd(buff);
+ 322   4                  }
+ 323   3                  else
+ 324   3                  {
+ 325   4                    sprintf(buff,"%d  ",temp[3]);
+ 326   4                    string_to_lcd(buff);
+ 327   4                  }
+ 328   3                }
+ 329   2                else 
+ 330   2                {
+ 331   3                  sprintf(buff,"    ",temp[3]);
+ 332   3                  string_to_lcd(buff);
+ 333   3                }
+ 334   2                //T5
+ 335   2                lcd_soft_i2c_data('T');
+ 336   2                lcd_soft_i2c_data('2');
+ 337   2                lcd_soft_i2c_data(':');
+ 338   2                if(temp[4]>0 && 999>temp[4])
+ 339   2                {
+ 340   3                  if(temp[4]>99)
+ 341   3                  {
+ 342   4                    sprintf(buff,"%d ",temp[4]);
+ 343   4                    string_to_lcd(buff);
+ 344   4                  }
+ 345   3                  else
+ 346   3                  {
+ 347   4                    sprintf(buff,"%d  ",temp[4]);
+ 348   4                    string_to_lcd(buff);
+ 349   4              
+ 350   4                  }
+ 351   3                }
+ 352   2                else 
+ 353   2                {
+ 354   3                  sprintf(buff,"    ",temp[4]);
+ 355   3                  string_to_lcd(buff);
+ 356   3                }
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 7   
+
+ 357   2                //T6
+ 358   2                lcd_soft_i2c_data('T');
+ 359   2                lcd_soft_i2c_data('3');
+ 360   2                lcd_soft_i2c_data(':');
+ 361   2                if(temp[5]>0 && 999>temp[5])
+ 362   2                {
+ 363   3                  if(temp[5]>99)
+ 364   3                  {
+ 365   4                    sprintf(buff,"%d",temp[5]);
+ 366   4                    string_to_lcd(buff);
+ 367   4                  }
+ 368   3                  else
+ 369   3                  {
+ 370   4                    sprintf(buff,"%d ",temp[5]);
+ 371   4                    string_to_lcd(buff);
+ 372   4                  }
+ 373   3                }
+ 374   2                else 
+ 375   2                {
+ 376   3                  sprintf(buff,"   ",temp[5]);
+ 377   3                  string_to_lcd(buff);
+ 378   3                }
+ 379   2      //          lcd_soft_i2c_command(ADDR_LINE3);
+ 380   2      //          lcd_soft_i2c_data('T');
+ 381   2      //          lcd_soft_i2c_data('2');
+ 382   2      //          lcd_soft_i2c_data(':');
+ 383   2      //          sprintf(buff,"%d",temp[1]);
+ 384   2      //          string_to_lcd(buff);
+ 385   2      //          lcd_soft_i2c_command(ADDR_LINE4);
+ 386   2      //          lcd_soft_i2c_data('T');
+ 387   2      //          lcd_soft_i2c_data('3');
+ 388   2      //          lcd_soft_i2c_data(':');
+ 389   2      //          sprintf(buff,"%d",temp[2]);
+ 390   2      //          string_to_lcd(buff);
+ 391   2                
+ 392   2                
+ 393   2      //          lcd_soft_i2c_data(' ');
+ 394   2      //          lcd_soft_i2c_data(' ');   
+ 395   2      //          lcd_soft_i2c_data('T');
+ 396   2      //          lcd_soft_i2c_data('2');
+ 397   2      //          lcd_soft_i2c_data(':');
+ 398   2      //          sprintf(buff,"%d",temp[1]);
+ 399   2      //          string_to_lcd(buff);
+ 400   2      //          lcd_soft_i2c_data(' ');
+ 401   2      //          lcd_soft_i2c_data(' ');   
+ 402   2      //          lcd_soft_i2c_data('T');
+ 403   2      //          lcd_soft_i2c_data('3');
+ 404   2      //          lcd_soft_i2c_data(':');
+ 405   2      //          sprintf(buff,"%d",temp[2]);
+ 406   2      //          string_to_lcd(buff);  
+ 407   2      //        
+ 408   2      //        
+ 409   2      //          
+ 410   2      //          lcd_soft_i2c_command(ADDR_LINE2);
+ 411   2      //          lcd_soft_i2c_data('T');
+ 412   2      //          lcd_soft_i2c_data('4');
+ 413   2      //          lcd_soft_i2c_data(':');
+ 414   2      //          sprintf(buff,"%d",temp[3]);
+ 415   2      //          string_to_lcd(buff);
+ 416   2      //          lcd_soft_i2c_data(' ');
+ 417   2      //          lcd_soft_i2c_data(' ');   
+ 418   2      //          lcd_soft_i2c_data('T');
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 8   
+
+ 419   2      //          lcd_soft_i2c_data('5');
+ 420   2      //          lcd_soft_i2c_data(':');
+ 421   2      //          sprintf(buff,"%d",temp[4]);
+ 422   2      //          string_to_lcd(buff);
+ 423   2      //          lcd_soft_i2c_data(' ');
+ 424   2      //          lcd_soft_i2c_data(' ');   
+ 425   2      //          lcd_soft_i2c_data('T');
+ 426   2      //          lcd_soft_i2c_data('6');
+ 427   2      //          lcd_soft_i2c_data(':');
+ 428   2      //          sprintf(buff,"%d",temp[5]);
+ 429   2      //          string_to_lcd(buff);  
+ 430   2      
+ 431   2              tick=0;
+ 432   2            }
+ 433   1      }
+ 434          void ADC_check(void)
+ 435          { 
+ 436   1        if(tick==10)
+ 437   1        {
+ 438   2          A0=Read_ADC(AIN0,0x02);
+ 439   2          temp[0]=Thermistor(A0,5000);
+ 440   2        }
+ 441   1        else if(tick==20)
+ 442   1        {
+ 443   2          A1=Read_ADC(AIN1,0x02);
+ 444   2          temp[1]=Thermistor(A1,5000);
+ 445   2        }
+ 446   1        else if(tick==30)
+ 447   1        {
+ 448   2          A2=Read_ADC(AIN2,0x02);
+ 449   2          temp[2]=Thermistor(A2,5000);
+ 450   2        }
+ 451   1        else if(tick==40)
+ 452   1        {
+ 453   2          A3=Read_ADC(AIN3,0x02);
+ 454   2          temp[3]=Thermistor(A3,5000);
+ 455   2        }
+ 456   1        else if(tick==50)
+ 457   1        {
+ 458   2          A4=Read_ADC(AIN4,0x02);
+ 459   2          temp[4]=Thermistor(A4,5000);
+ 460   2        }
+ 461   1        else if(tick==60)
+ 462   1        {
+ 463   2          A5=Read_ADC(AIN5,0x02);
+ 464   2          temp[5]=Thermistor(A5,5000);
+ 465   2        }
+ 466   1        else if(tick==70)
+ 467   1        {
+ 468   2          FB_B=Read_ADC(AIN6,0x02);
+ 469   2        }
+ 470   1        
+ 471   1      }
+ 472          
+ 473          void PWM0_INIT(void)
+ 474          {
+ 475   1      /**********************************************************************
+ 476   1          PWM frequency = Fpwm/((PWMPH,PWMPL) + 1) <Fpwm = Fsys/PWM_CLOCK_DIV> 
+ 477   1                        = (16MHz/8)/(0x7CF + 1)
+ 478   1                        = 1KHz (1ms)
+ 479   1      ***********************************************************************/
+ 480   1          CKCON&=0xBF;   // use sys frq
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 9   
+
+ 481   1          PWMCON1&=0xF8; // 
+ 482   1          PWMCON1|=0x01; // div 2
+ 483   1          PIOCON0|=0x10; // enable_pwm_ch4_p01_output;
+ 484   1      }
+ 485          
+ 486          void PWM0_ConfigOutputChannel(float value)
+ 487          {
+ 488   1        unsigned long u32PWM0Frequency;
+ 489   1      
+ 490   1        u32PWM0Frequency = map(value,0,120,55,90);
+ 491   1        BIT_TMP=EA;EA=0;TA=0xAA;TA=0x55;SFRS=1;EA=BIT_TMP;
+ 492   1        PWMCON1&=0x3F; //Independent
+ 493   1        PWMCON1&=0xEF; //EdgeAligned
+ 494   1      //  PWM4H=(0x1E)>>8; 
+ 495   1      //  PWM4L=(0x1E);
+ 496   1      //  PWMPH = 0x58 >>8;
+ 497   1      //  PWMPL = 0x58;
+ 498   1        PWM4H =(u32PWM0Frequency*3/10)>>8;
+ 499   1        PWM4L =(u32PWM0Frequency*3/10);
+ 500   1        PWMPH = u32PWM0Frequency>>8;
+ 501   1        PWMPL = u32PWM0Frequency;
+ 502   1        BIT_TMP=EA;EA=0;TA=0xAA;TA=0x55;SFRS=0;EA=BIT_TMP;
+ 503   1        PWMRUN= 1;
+ 504   1      }
+ 505          
+ 506          
+ 507          void USER_CONDITION_check(void)
+ 508          {
+ 509   1        avg_low_temperature=(temp[0]+temp[1]+temp[2])/3;
+ 510   1        avg_high_temperature=(temp[4]+temp[5]+temp[6])/3;
+ 511   1        if(temp[0]>=Thresh_hole1 || temp[1]>=Thresh_hole1 ||temp[2]>=Thresh_hole1)
+ 512   1        {
+ 513   2          if(hall_is_on==0 && is_on_thresh_hold==0)
+ 514   2          { 
+ 515   3            P15=1;
+ 516   3            P16=0;
+ 517   3            //PWM0_ConfigOutputChannel(avg_low_temperature);
+ 518   3            P00=1;
+ 519   3            turn_5s_buzzer=0;
+ 520   3            is_on_thresh_hold=1;
+ 521   3          }
+ 522   2          if(hall_is_on==1 && turn_5s_buzzer==0 && is_on_thresh_hold==0)
+ 523   2          {
+ 524   3            turn_5s_buzzer=1;
+ 525   3            is_on_thresh_hold=1;
+ 526   3          }
+ 527   2          if(P02==0 && hall_is_on==0)
+ 528   2          {
+ 529   3            P15=0;
+ 530   3            P16=1;
+ 531   3          }
+ 532   2        }
+ 533   1        if(temp[0]<Thresh_hole1 && temp[1]<Thresh_hole1 && temp[2]<Thresh_hole1)
+ 534   1        {
+ 535   2            if(hall_is_on==0)
+ 536   2            {
+ 537   3              is_on_thresh_hold=0;
+ 538   3              P15=0;
+ 539   3              P16=1;
+ 540   3              P00=0;
+ 541   3            }
+ 542   2            if(hall_is_on==1)
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 10  
+
+ 543   2            {
+ 544   3              turn_5s_buzzer=0;
+ 545   3            }   
+ 546   2        } 
+ 547   1        
+ 548   1        if(turn_5s_buzzer==1)
+ 549   1        {
+ 550   2            count_to_off_buzzer++;
+ 551   2            P15=1;
+ 552   2            P16=0;
+ 553   2            //PWM0_ConfigOutputChannel(avg_high_temperature);
+ 554   2            if(count_to_off_buzzer>1000)
+ 555   2            {
+ 556   3              P15=0;
+ 557   3              P16=1;
+ 558   3              //P00=0;//cmt
+ 559   3              turn_5s_buzzer=2;
+ 560   3              count_to_off_buzzer=0;
+ 561   3            }
+ 562   2        }
+ 563   1        if(temp[3]>=Thresh_hole2 || temp[4]>=Thresh_hole2 ||temp[5]>=Thresh_hole2)
+ 564   1        {
+ 565   2            if(hall_is_on == 1 && is_on_thresh_hold == 0 /*1*/ && turn_5s_buzzer==2)
+ 566   2            { 
+ 567   3              P15=1;
+ 568   3              P16=0;
+ 569   3              //PWM0_ConfigOutputChannel(avg_low_temperature);
+ 570   3              P00=1;
+ 571   3              is_on_thresh_hold = 1 /*2*/ ;
+ 572   3            }
+ 573   2            if(hall_is_on == 1 && P02==0)
+ 574   2            {
+ 575   3                P15=0;
+ 576   3                P16=1;
+ 577   3            }
+ 578   2        }
+ 579   1        else if(temp[3]<Thresh_hole2 && temp[4]<Thresh_hole2 && temp[5]<Thresh_hole2 )
+ 580   1        {
+ 581   2          if(hall_is_on==1)
+ 582   2          { 
+ 583   3            if(turn_5s_buzzer==2)
+ 584   3            {
+ 585   4              P15=0;
+ 586   4              P16=1;
+ 587   4            }
+ 588   3            
+ 589   3            P00=0;
+ 590   3            is_on_thresh_hold=0;
+ 591   3          }
+ 592   2        } 
+ 593   1      }
+ 594          
+ 595          
+ 596          uint8_t i=0;
+ 597          void BUTTON_check(void)
+ 598          {
+ 599   1          if(but==0x44)
+ 600   1          {
+ 601   2            i++;
+ 602   2            delay_ms(200);
+ 603   2          }
+ 604   1          if(i>=2)
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 11  
+
+ 605   1          {
+ 606   2            i=0;
+ 607   2            
+ 608   2          }
+ 609   1          if(i==0)
+ 610   1          {
+ 611   2            TM1650_write(0x6a,seg_code[but_count[0]]);
+ 612   2            TM1650_write(0x6c,seg_code[but_count[1]]);
+ 613   2            TM1650_write(0x6e,seg_code[but_count[2]]);
+ 614   2            TM1650_write(0x68,0x38);
+ 615   2            if(Thresh_hole1 != (but_count[0]*100+but_count[1]*10+but_count[2]))
+ 616   2            {
+ 617   3              Thresh_hole1 = (but_count[0]*100+but_count[1]*10+but_count[2]);
+ 618   3            }
+ 619   2            else if (Thresh_hole1 == (but_count[0]*100+but_count[1]*10+but_count[2]))
+ 620   2            {
+ 621   3              if(count==1500)
+ 622   3              {
+ 623   4                if(Thresh_hole1>120)
+ 624   4                {
+ 625   5                  Thresh_hole1= 120;
+ 626   5                }
+ 627   4                if (eData.buff1 != Thresh_hole1) 
+ 628   4                {
+ 629   5                  eData.buff1  = Thresh_hole1;
+ 630   5                  AP_EEPROM_Commit();
+ 631   5                  TM1650_write(0x68,0x5E);
+ 632   5                  delay_ms(1000);
+ 633   5                  TM1650_write(0x68,0x38);
+ 634   5                  delay_ms(20);
+ 635   5                } //ghi
+ 636   4                count=0;
+ 637   4              }
+ 638   3              count++;
+ 639   3            }
+ 640   2            else
+ 641   2            {
+ 642   3            count=0;
+ 643   3            }
+ 644   2      
+ 645   2            if(but==0x45||but==0x4D )
+ 646   2            {
+ 647   3              TM1650_write(0x6a,seg_code[but_count[0]]);
+ 648   3              but_count[0]++;
+ 649   3              if(but_count[0]>=10)
+ 650   3              {
+ 651   4                but_count[0]=0;
+ 652   4              }
+ 653   3              TM1650_write(0x6a,seg_code[but_count[0]]);
+ 654   3              delay_ms(200);
+ 655   3            } 
+ 656   2            else if(but==0x46 || but==0x56)
+ 657   2            {
+ 658   3              TM1650_write(0x6c,seg_code[but_count[1]]);
+ 659   3              but_count[1]++;
+ 660   3              if(but_count[1]>=10)
+ 661   3              {
+ 662   4                but_count[1]=0;
+ 663   4              }
+ 664   3              TM1650_write(0x6c,seg_code[but_count[1]]);
+ 665   3              delay_ms(200);
+ 666   3            } 
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 12  
+
+ 667   2            else if(but==0x47 || but==0x5F)
+ 668   2            {
+ 669   3              TM1650_write(0x6e,seg_code[but_count[2]]);
+ 670   3              but_count[2]++;
+ 671   3              if(but_count[2]>=10)
+ 672   3              {
+ 673   4                but_count[2]=0;
+ 674   4              }
+ 675   3              TM1650_write(0x6e,seg_code[but_count[2]]);
+ 676   3              delay_ms(200);
+ 677   3            } 
+ 678   2          }
+ 679   1          else if(i==1)
+ 680   1          {
+ 681   2              TM1650_write(0x6a,seg_code[but_count[3]]);
+ 682   2              TM1650_write(0x6c,seg_code[but_count[4]]);
+ 683   2              TM1650_write(0x6e,seg_code[but_count[5]]);
+ 684   2              TM1650_write(0x68,0x76);
+ 685   2              if(Thresh_hole2 != (but_count[3]*100+but_count[4]*10+but_count[5]))
+ 686   2              {
+ 687   3                Thresh_hole2= (but_count[3]*100+but_count[4]*10+but_count[5]);
+ 688   3              }
+ 689   2              else if (Thresh_hole2 == (but_count[3]*100+but_count[4]*10+but_count[5]))
+ 690   2              {
+ 691   3                if(count==1500)
+ 692   3                {
+ 693   4                  if(Thresh_hole2>120)
+ 694   4                  {
+ 695   5                    Thresh_hole2= 120;
+ 696   5                  }
+ 697   4                  if (eData.buff2 != Thresh_hole2) 
+ 698   4                  {
+ 699   5                    eData.buff2  = Thresh_hole2;
+ 700   5                    AP_EEPROM_Commit();
+ 701   5                    TM1650_write(0x68,0x5E);
+ 702   5                    delay_ms(1000);
+ 703   5                    TM1650_write(0x68,0x76);
+ 704   5                  } //ghi
+ 705   4                  count=0;
+ 706   4                }
+ 707   3                count++;
+ 708   3              }
+ 709   2              else
+ 710   2              {
+ 711   3              count=0;
+ 712   3              }
+ 713   2      
+ 714   2              if(but==0x45 || but==0x4D)
+ 715   2              {
+ 716   3                TM1650_write(0x6a,seg_code[but_count[3]]);
+ 717   3                but_count[3]++;
+ 718   3                if(but_count[3]>=10)
+ 719   3                {
+ 720   4                  but_count[3]=0;
+ 721   4                }
+ 722   3                TM1650_write(0x6a,seg_code[but_count[3]]);
+ 723   3                delay_ms(200);
+ 724   3              } 
+ 725   2              else if(but==0x46 || but==0x56)
+ 726   2              {
+ 727   3                TM1650_write(0x6c,seg_code[but_count[4]]);
+ 728   3                but_count[4]++;
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 13  
+
+ 729   3                if(but_count[4]>=10)
+ 730   3                {
+ 731   4                  but_count[4]=0;
+ 732   4                }
+ 733   3                TM1650_write(0x6c,seg_code[but_count[4]]);
+ 734   3                delay_ms(200);
+ 735   3              } 
+ 736   2              else if(but==0x47 ||but==0x5F )
+ 737   2              {
+ 738   3                TM1650_write(0x6e,seg_code[but_count[5]]);
+ 739   3                but_count[5]++;
+ 740   3                if(but_count[5]>=10)
+ 741   3                {
+ 742   4                  but_count[5]=0;
+ 743   4                }
+ 744   3                TM1650_write(0x6e,seg_code[but_count[5]]);
+ 745   3                delay_ms(200);
+ 746   3              } 
+ 747   2            }
+ 748   1      }
+ 749          void main(void) 
+ 750          {
+ 751   1        MODIFY_HIRC_166();
+ 752   1        
+ 753   1        GPIO_INIT();  
+ 754   1        
+ 755   1        ADC_Set_Enable(1);
+ 756   1        
+ 757   1        lcd_soft_i2c_setup();
+ 758   1        delay_ms(10);
+ 759   1        lcd_soft_i2c_setup();
+ 760   1        delay_ms(10);
+ 761   1        lcd_soft_i2c_setup();
+ 762   1        delay_ms(10);
+ 763   1        lcd_soft_i2c_setup();
+ 764   1        delay_ms(10);
+ 765   1        lcd_soft_i2c_setup();
+ 766   1        delay_ms(10);
+ 767   1        //PWM0_INIT();
+ 768   1      
+ 769   1        TM1650_init();
+ 770   1        
+ 771   1        //68 6a 6c 6e
+ 772   1        TM1650_write(0x68,0x3F);
+ 773   1        TM1650_write(0x6a,0x3F);
+ 774   1        TM1650_write(0x6c,0x3F);
+ 775   1        TM1650_write(0x6e,0x3F);
+ 776   1        AP_EEPROM_Init((uint8_t *)&eData, sizeof(eData));
+ 777   1        Thresh_hole1 = eData.buff1;
+ 778   1        Thresh_hole2 = eData.buff2;
+ 779   1        AP_EEPROM_Commit();
+ 780   1        delay_ms(20);
+ 781   1        
+ 782   1        but_count[0]= Thresh_hole1/100;
+ 783   1        but_count[1]=(Thresh_hole1 / 10) % 10;
+ 784   1        but_count[2]= Thresh_hole1 % 10;
+ 785   1        
+ 786   1        but_count[3]= Thresh_hole2/100;
+ 787   1        but_count[4]=(Thresh_hole2 / 10) % 10;
+ 788   1        but_count[5]= Thresh_hole2 % 10;
+ 789   1      
+ 790   1        while (1) 
+C51 COMPILER V9.60.7.0   MAIN                                                              10/27/2024 09:34:51 PAGE 14  
+
+ 791   1        {
+ 792   2          but=TM1650_read();
+ 793   2          BUTTON_check();
+ 794   2          if(set_mode==0)
+ 795   2          {
+ 796   3            ADC_check();
+ 797   3            GPIO_check();
+ 798   3            DISPLAY_check();    
+ 799   3            USER_CONDITION_check();
+ 800   3            tick++; 
+ 801   3            delay_ms(1);
+ 802   3          }
+ 803   2        }
+ 804   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   6967    ----
+   CONSTANT SIZE    =     75    ----
+   XDATA SIZE       =    107     124
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1       8
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
